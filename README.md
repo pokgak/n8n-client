@@ -2,13 +2,41 @@
 
 Python CLI for managing n8n workflows and troubleshooting executions.
 
+## Requirements
+
+- Python 3.11+
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+
 ## Setup
 
-Environment variables:
-- `N8N_API_KEY` - API key from n8n (Settings → n8n API)
-- `N8N_BASE_URL` - n8n instance URL (e.g., `https://your-instance.app.n8n.cloud`)
+### 1. Get your n8n API key
 
-No installation needed - uses `uv run` with inline script dependencies.
+1. Open your n8n instance
+2. Go to **Settings** → **n8n API**
+3. Click **Create API Key**
+4. Copy the generated key
+
+### 2. Set environment variables
+
+```bash
+export N8N_API_KEY="your-api-key-here"
+export N8N_BASE_URL="https://your-instance.app.n8n.cloud"
+```
+
+Or create a `.envrc` file (if using [direnv](https://direnv.net/)):
+
+```bash
+export N8N_API_KEY="your-api-key-here"
+export N8N_BASE_URL="https://your-instance.app.n8n.cloud"
+```
+
+### 3. Run the CLI
+
+No installation needed - uses `uv run` with inline script dependencies:
+
+```bash
+uv run n8n-cli.py --help
+```
 
 ## CLI Usage
 
