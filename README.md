@@ -1,0 +1,204 @@
+# n8n CLI
+
+Python CLI for managing n8n workflows and troubleshooting executions.
+
+## Setup
+
+Environment variables:
+- `N8N_API_KEY` - API key from n8n (Settings → n8n API)
+- `N8N_BASE_URL` - n8n instance URL (e.g., `https://your-instance.app.n8n.cloud`)
+
+No installation needed - uses `uv run` with inline script dependencies.
+
+## CLI Usage
+
+### Workflows
+
+```bash
+# List all workflows
+uv run n8n-cli.py workflows
+uv run n8n-cli.py workflows --active
+uv run n8n-cli.py workflows --json
+
+# Get workflow details
+uv run n8n-cli.py workflow <workflow_id>
+uv run n8n-cli.py workflow <workflow_id> --json
+
+# Update workflow from JSON file
+uv run n8n-cli.py update <workflow_id> workflow.json
+
+# Activate/deactivate workflows
+uv run n8n-cli.py activate <workflow_id>
+uv run n8n-cli.py deactivate <workflow_id>
+```
+
+### Nodes (view and edit workflow nodes)
+
+```bash
+# List all nodes in a workflow
+uv run n8n-cli.py nodes <workflow_id>
+
+# View node details
+uv run n8n-cli.py node <workflow_id> "node name"
+uv run n8n-cli.py node <workflow_id> "node name" --json
+
+# View Code node's JavaScript
+uv run n8n-cli.py node <workflow_id> "node name" --code
+
+# Update Code node from file
+uv run n8n-cli.py node <workflow_id> "node name" --set-code script.js
+
+# Rename a node
+uv run n8n-cli.py node <workflow_id> "old name" --rename "new name"
+
+# Rename and update code in one command
+uv run n8n-cli.py node <workflow_id> "old name" --rename "new name" --set-code script.js
+```
+
+### Export/Import Code Nodes
+
+Useful for editing Code node scripts in a proper editor with syntax highlighting.
+
+```bash
+# Export all Code nodes to a directory
+uv run n8n-cli.py export-code <workflow_id> ./nodes/
+# Creates: ./nodes/node_name.js, ./nodes/_manifest.json
+
+# Edit the scripts with your editor...
+
+# Import updated scripts back to workflow
+uv run n8n-cli.py import-code <workflow_id> ./nodes/
+```
+
+### Trigger Workflows
+
+```bash
+# Trigger workflow by name via webhook
+uv run n8n-cli.py trigger "Alerting"
+
+# Trigger with JSON payload
+uv run n8n-cli.py trigger "Alerting" --data '{"key": "value"}'
+
+# Trigger with payload from file
+uv run n8n-cli.py trigger "Alerting" --file payload.json
+
+# Use test webhook URL (for debugging)
+uv run n8n-cli.py trigger "Alerting" --test --data '{"test": true}'
+
+# Run workflow directly (not via webhook)
+uv run n8n-cli.py run <workflow_id>
+uv run n8n-cli.py run <workflow_id> --data '{"input": "data"}'
+uv run n8n-cli.py run <workflow_id> --output  # show node outputs
+```
+
+### Executions
+
+```bash
+# List executions
+uv run n8n-cli.py executions
+uv run n8n-cli.py executions --workflow <workflow_id>
+uv run n8n-cli.py executions --status error
+uv run n8n-cli.py executions -n 100
+
+# Get execution details (includes error info for failed executions)
+uv run n8n-cli.py execution <execution_id>
+uv run n8n-cli.py execution <execution_id> --data  # full execution data
+
+# Retry failed execution
+uv run n8n-cli.py retry <execution_id>
+uv run n8n-cli.py retry <execution_id> --latest  # use current workflow version
+```
+
+## Python API Usage
+
+```python
+# /// script
+# dependencies = ["httpx"]
+# ///
+from n8n_client import N8nClient
+
+client = N8nClient()
+
+# List workflows
+workflows = client.get_workflows()
+for wf in workflows.data:
+    print(f"{wf['id']}: {wf['name']}")
+
+# Get all pages
+all_workflows = client.get_all_pages(client.get_workflows, active=True)
+
+# Get workflow details
+wf = client.get_workflow("workflow_id")
+
+# Get executions for a workflow
+executions = client.get_executions(workflow_id="workflow_id", status="error")
+
+# Get execution with full data
+ex = client.get_execution("execution_id", include_data=True)
+
+# Retry failed execution
+client.retry_execution("execution_id")
+
+# Activate/deactivate
+client.activate_workflow("workflow_id")
+client.deactivate_workflow("workflow_id")
+```
+
+## Common Workflows
+
+### Editing Code Nodes
+
+```bash
+# 1. Export all Code nodes to files
+uv run n8n-cli.py export-code <workflow_id> ./nodes/
+
+# 2. Edit scripts in your editor (with syntax highlighting)
+code ./nodes/
+
+# 3. Import changes back
+uv run n8n-cli.py import-code <workflow_id> ./nodes/
+```
+
+### Quick Node Update
+
+```bash
+# View current code
+uv run n8n-cli.py node <workflow_id> "node name" --code > script.js
+
+# Edit and update
+uv run n8n-cli.py node <workflow_id> "node name" --set-code script.js
+```
+
+### Troubleshooting Executions
+
+```bash
+# Find failed executions
+uv run n8n-cli.py executions --status error
+
+# Get error details
+uv run n8n-cli.py execution <id>
+
+# Get full execution data for debugging
+uv run n8n-cli.py execution <id> --data --json
+```
+
+### Testing Webhook Workflows
+
+```bash
+# Trigger with test payload
+uv run n8n-cli.py trigger "Workflow Name" --test --file test_payload.json
+
+# Check execution result
+uv run n8n-cli.py executions --workflow <id> -n 1
+```
+
+## API Endpoints Covered
+
+- **Workflows**: list, get, create, update, delete, activate, deactivate, tags
+- **Executions**: list, get, delete, retry
+- **Tags**: list, get, create, update, delete
+- **Credentials**: create, delete, schema
+- **Users**: list
+- **Audit**: generate security audit
+- **Variables**: list, create, delete
+- **Projects**: list
