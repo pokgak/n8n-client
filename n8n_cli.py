@@ -30,10 +30,18 @@ Usage:
     uv run n8n-cli.py node <workflow_id> "node name" --code
     uv run n8n-cli.py node <workflow_id> "node name" --set-code script.js
     uv run n8n-cli.py node <workflow_id> "old name" --rename "new name"
+    uv run n8n-cli.py node <workflow_id> "HTTP Request" --set-param url="https://example.com"
+    uv run n8n-cli.py node <workflow_id> "Agent" --set-param-json '{"options": {"systemMessage": "Hello"}}'
 
     # Export/import Code node scripts
     uv run n8n-cli.py export-code <workflow_id> ./nodes/
     uv run n8n-cli.py import-code <workflow_id> ./nodes/
+
+    # Credentials management
+    uv run n8n-cli.py credentials
+    uv run n8n-cli.py credential-schema <type>
+    uv run n8n-cli.py create-credential --name "My API" --type httpHeaderAuth --data '{"name": "X-API-Key", "value": "secret"}'
+    uv run n8n-cli.py delete-credential <id>
 
     # List executions
     uv run n8n-cli.py executions
@@ -193,6 +201,16 @@ def cmd_nodes(client: N8nClient, args):
         print(f"\n* {code_count} Code node(s) - use 'node <id> <name> --code' to view")
 
 
+def set_nested_param(obj: dict, key: str, value):
+    """Set a nested parameter using dot notation (e.g., 'options.systemMessage')."""
+    parts = key.split('.')
+    for part in parts[:-1]:
+        if part not in obj:
+            obj[part] = {}
+        obj = obj[part]
+    obj[parts[-1]] = value
+
+
 def cmd_node(client: N8nClient, args):
     wf = client.get_workflow(args.id)
     nodes = wf.get("nodes", [])
@@ -211,8 +229,66 @@ def cmd_node(client: N8nClient, args):
             print(f"  - {n.get('name')}")
         sys.exit(1)
 
+    # Handle --set-param-json (bulk parameter update)
+    if args.set_param_json:
+        param_data = json.loads(args.set_param_json)
+        if 'parameters' not in node:
+            node['parameters'] = {}
+
+        def deep_merge(base, updates):
+            for key, value in updates.items():
+                if isinstance(value, dict) and key in base and isinstance(base[key], dict):
+                    deep_merge(base[key], value)
+                else:
+                    base[key] = value
+
+        deep_merge(node['parameters'], param_data)
+
+        update_payload = {
+            'name': wf['name'],
+            'nodes': nodes,
+            'connections': wf['connections'],
+            'settings': wf.get('settings', {}),
+            'staticData': wf.get('staticData'),
+        }
+
+        client.update_workflow(args.id, update_payload)
+        print(f"Node '{args.name}' parameters updated.")
+        return
+
+    # Handle --set-param (single parameter update)
+    if args.set_param:
+        if 'parameters' not in node:
+            node['parameters'] = {}
+
+        for param in args.set_param:
+            if '=' not in param:
+                print(f"Invalid parameter format: {param}. Use key=value", file=sys.stderr)
+                sys.exit(1)
+
+            key, value = param.split('=', 1)
+
+            # Try to parse value as JSON for complex types
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError:
+                pass  # Keep as string
+
+            set_nested_param(node['parameters'], key, value)
+
+        update_payload = {
+            'name': wf['name'],
+            'nodes': nodes,
+            'connections': wf['connections'],
+            'settings': wf.get('settings', {}),
+            'staticData': wf.get('staticData'),
+        }
+
+        client.update_workflow(args.id, update_payload)
+        print(f"Node '{args.name}' parameters updated.")
+        return
+
     # Handle --set-code
-    if args.set_code:
         if node.get('type') != 'n8n-nodes-base.code':
             print(f"Node '{args.name}' is not a Code node.", file=sys.stderr)
             sys.exit(1)
@@ -620,6 +696,80 @@ def cmd_trigger(client: N8nClient, args):
         print(response.text[:500])
 
 
+# ==================== Credentials Commands ====================
+
+
+def cmd_credentials(client: N8nClient, args):
+    result = client.get_all_pages(client.get_credentials)
+
+    if args.json:
+        print_json(result)
+        return
+
+    if not result:
+        print("No credentials found.")
+        return
+
+    print(f"{'ID':<20} {'NAME':<40} {'TYPE':<30}")
+    print("-" * 92)
+    for cred in result:
+        print(f"{cred['id']:<20} {cred['name'][:38]:<40} {cred.get('type', '-'):<30}")
+
+
+def cmd_credential_schema(client: N8nClient, args):
+    schema = client.get_credential_schema(args.type)
+
+    if args.json:
+        print_json(schema)
+        return
+
+    print(f"Schema for: {args.type}\n")
+
+    properties = schema.get('properties', [])
+    if not properties:
+        print("No properties defined.")
+        return
+
+    print(f"{'NAME':<25} {'TYPE':<15} {'REQUIRED':<10} {'DESCRIPTION'}")
+    print("-" * 90)
+    for prop in properties:
+        name = prop.get('name', prop.get('displayName', '-'))
+        prop_type = prop.get('type', '-')
+        required = 'yes' if prop.get('required') else 'no'
+        desc = prop.get('description', '-')[:40]
+        print(f"{name:<25} {prop_type:<15} {required:<10} {desc}")
+
+
+def cmd_create_credential(client: N8nClient, args):
+    data = {}
+    if args.data:
+        data = json.loads(args.data)
+    elif args.data_file:
+        with open(args.data_file) as f:
+            data = json.load(f)
+
+    credential = {
+        'name': args.name,
+        'type': args.type,
+        'data': data,
+    }
+
+    result = client.create_credential(credential)
+
+    if args.json:
+        print_json(result)
+        return
+
+    print(f"Credential created: {result.get('name')}")
+    print(f"ID: {result.get('id')}")
+    print(f"Type: {result.get('type')}")
+
+
+def cmd_delete_credential(client: N8nClient, args):
+    client.delete_credential(args.id)
+    print(f"Credential {args.id} deleted.")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="n8n CLI - Manage workflows and troubleshoot executions",
@@ -667,6 +817,8 @@ def main():
     p_node.add_argument("name", help="Node name")
     p_node.add_argument("--code", "-c", action="store_true", help="Show node code (Code nodes only)")
     p_node.add_argument("--set-code", "-s", metavar="FILE", help="Update node code from file")
+    p_node.add_argument("--set-param", "-p", action="append", metavar="KEY=VALUE", help="Set a node parameter (can be used multiple times, supports dot notation for nested keys)")
+    p_node.add_argument("--set-param-json", metavar="JSON", help="Set node parameters from JSON object (deep merged)")
     p_node.add_argument("--rename", "-r", metavar="NAME", help="Rename the node")
     p_node.add_argument("--json", action="store_true", help="Output as JSON")
     p_node.set_defaults(func=cmd_node)
@@ -730,6 +882,31 @@ def main():
     p_trigger.add_argument("--test", "-t", action="store_true", help="Use test webhook URL")
     p_trigger.add_argument("--json", action="store_true", help="Output full result as JSON")
     p_trigger.set_defaults(func=cmd_trigger)
+
+    # credentials
+    p_credentials = subparsers.add_parser("credentials", help="List all credentials")
+    p_credentials.add_argument("--json", action="store_true", help="Output as JSON")
+    p_credentials.set_defaults(func=cmd_credentials)
+
+    # credential-schema
+    p_cred_schema = subparsers.add_parser("credential-schema", help="Get schema for a credential type")
+    p_cred_schema.add_argument("type", help="Credential type (e.g., httpHeaderAuth, openAiApi)")
+    p_cred_schema.add_argument("--json", action="store_true", help="Output as JSON")
+    p_cred_schema.set_defaults(func=cmd_credential_schema)
+
+    # create-credential
+    p_create_cred = subparsers.add_parser("create-credential", help="Create a new credential")
+    p_create_cred.add_argument("--name", "-n", required=True, help="Credential name")
+    p_create_cred.add_argument("--type", "-t", required=True, help="Credential type")
+    p_create_cred.add_argument("--data", "-d", help="Credential data as JSON string")
+    p_create_cred.add_argument("--data-file", "-f", help="File containing credential data as JSON")
+    p_create_cred.add_argument("--json", action="store_true", help="Output as JSON")
+    p_create_cred.set_defaults(func=cmd_create_credential)
+
+    # delete-credential
+    p_delete_cred = subparsers.add_parser("delete-credential", help="Delete a credential")
+    p_delete_cred.add_argument("id", help="Credential ID")
+    p_delete_cred.set_defaults(func=cmd_delete_credential)
 
     args = parser.parse_args()
 

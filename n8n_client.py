@@ -236,8 +236,22 @@ class N8nClient:
 
     # ==================== Credentials ====================
 
+    def get_credentials(
+        self,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> PaginatedResponse:
+        """Retrieve all credentials (metadata only, not secret values)."""
+        return self._paginated_request("/credentials", limit=limit, cursor=cursor)
+
     def create_credential(self, credential: dict[str, Any]) -> dict[str, Any]:
-        """Create a new credential."""
+        """
+        Create a new credential.
+
+        Args:
+            credential: Dict with 'name', 'type', and 'data' fields.
+                       Example: {'name': 'My API Key', 'type': 'httpHeaderAuth', 'data': {'name': 'X-API-Key', 'value': 'secret'}}
+        """
         return self._request("POST", "/credentials", json=credential)
 
     def delete_credential(self, credential_id: str) -> dict[str, Any]:
