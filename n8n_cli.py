@@ -10,50 +10,50 @@ n8n CLI - Command-line tool for managing workflows and troubleshooting execution
 
 Usage:
     # List workflows
-    uv run n8n-cli.py workflows
-    uv run n8n-cli.py workflows --active
+    uv run n8n-cli workflows
+    uv run n8n-cli workflows --active
 
     # Get workflow details
-    uv run n8n-cli.py workflow <id>
+    uv run n8n-cli workflow <id>
 
     # Update workflow from JSON file
-    uv run n8n-cli.py update <id> workflow.json
+    uv run n8n-cli update <id> workflow.json
 
     # Activate/deactivate workflows
-    uv run n8n-cli.py activate <id>
-    uv run n8n-cli.py deactivate <id>
+    uv run n8n-cli activate <id>
+    uv run n8n-cli deactivate <id>
 
     # List nodes in a workflow
-    uv run n8n-cli.py nodes <workflow_id>
+    uv run n8n-cli nodes <workflow_id>
 
     # View/edit specific node
-    uv run n8n-cli.py node <workflow_id> "node name" --code
-    uv run n8n-cli.py node <workflow_id> "node name" --set-code script.js
-    uv run n8n-cli.py node <workflow_id> "old name" --rename "new name"
-    uv run n8n-cli.py node <workflow_id> "HTTP Request" --set-param url="https://example.com"
-    uv run n8n-cli.py node <workflow_id> "Agent" --set-param-json '{"options": {"systemMessage": "Hello"}}'
+    uv run n8n-cli node <workflow_id> "node name" --code
+    uv run n8n-cli node <workflow_id> "node name" --set-code script.js
+    uv run n8n-cli node <workflow_id> "old name" --rename "new name"
+    uv run n8n-cli node <workflow_id> "HTTP Request" --set-param url="https://example.com"
+    uv run n8n-cli node <workflow_id> "Agent" --set-param-json '{"options": {"systemMessage": "Hello"}}'
 
     # Export/import Code node scripts
-    uv run n8n-cli.py export-code <workflow_id> ./nodes/
-    uv run n8n-cli.py import-code <workflow_id> ./nodes/
+    uv run n8n-cli export-code <workflow_id> ./nodes/
+    uv run n8n-cli import-code <workflow_id> ./nodes/
 
     # Credentials management
-    uv run n8n-cli.py credentials
-    uv run n8n-cli.py credential-schema <type>
-    uv run n8n-cli.py create-credential --name "My API" --type httpHeaderAuth --data '{"name": "X-API-Key", "value": "secret"}'
-    uv run n8n-cli.py delete-credential <id>
+    uv run n8n-cli credentials
+    uv run n8n-cli credential-schema <type>
+    uv run n8n-cli create-credential --name "My API" --type httpHeaderAuth --data '{"name": "X-API-Key", "value": "secret"}'
+    uv run n8n-cli delete-credential <id>
 
     # List executions
-    uv run n8n-cli.py executions
-    uv run n8n-cli.py executions --workflow <id>
-    uv run n8n-cli.py executions --status error
+    uv run n8n-cli executions
+    uv run n8n-cli executions --workflow <id>
+    uv run n8n-cli executions --status error
 
     # Get execution details
-    uv run n8n-cli.py execution <id>
-    uv run n8n-cli.py execution <id> --data
+    uv run n8n-cli execution <id>
+    uv run n8n-cli execution <id> --data
 
     # Retry failed execution
-    uv run n8n-cli.py retry <id>
+    uv run n8n-cli retry <id>
 """
 
 import argparse
