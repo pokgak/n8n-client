@@ -33,6 +33,17 @@ Usage:
     uv run n8n-cli node <workflow_id> "HTTP Request" --set-param url="https://example.com"
     uv run n8n-cli node <workflow_id> "Agent" --set-param-json '{"options": {"systemMessage": "Hello"}}'
 
+    # Create a new node
+    uv run n8n-cli node <workflow_id> --add --type code --name "My Code Node"
+    uv run n8n-cli node <workflow_id> --add --type switch --name "My Switch" --position 400,300
+
+    # Add rule to Switch node
+    uv run n8n-cli node <workflow_id> "Switch Name" --add-rule --field title --op contains --match-value "Error" --output-key errors
+
+    # Manage connections between nodes
+    uv run n8n-cli connect <workflow_id> "Source Node" "Target Node" --output 0
+    uv run n8n-cli disconnect <workflow_id> "Source Node" "Target Node"
+
     # Export/import Code node scripts
     uv run n8n-cli export-code <workflow_id> ./nodes/
     uv run n8n-cli import-code <workflow_id> ./nodes/
@@ -61,10 +72,30 @@ import json
 import os
 import re
 import sys
+import uuid
 from datetime import datetime
 from pathlib import Path
 
 from n8n_client import N8nClient
+
+
+NODE_TYPE_SHORTCUTS = {
+    "code": "n8n-nodes-base.code",
+    "switch": "n8n-nodes-base.switch",
+    "http": "n8n-nodes-base.httpRequest",
+    "webhook": "n8n-nodes-base.webhook",
+    "set": "n8n-nodes-base.set",
+    "if": "n8n-nodes-base.if",
+}
+
+SWITCH_OPERATORS = {
+    "contains": {"type": "string", "operation": "contains"},
+    "equals": {"type": "string", "operation": "equals"},
+    "not-equals": {"type": "string", "operation": "notEquals"},
+    "starts-with": {"type": "string", "operation": "startsWith"},
+    "ends-with": {"type": "string", "operation": "endsWith"},
+    "regex": {"type": "string", "operation": "regex"},
+}
 
 
 def format_time(iso_string: str | None) -> str:
@@ -211,9 +242,278 @@ def set_nested_param(obj: dict, key: str, value):
     obj[parts[-1]] = value
 
 
+def get_node_type_full(shorthand: str) -> str:
+    """Convert type shorthand to full n8n type."""
+    return NODE_TYPE_SHORTCUTS.get(shorthand, shorthand)
+
+
+def calculate_node_position(nodes: list) -> list:
+    """Calculate position for new node (rightmost + 200px offset)."""
+    if not nodes:
+        return [200, 200]
+    max_x = max(n.get("position", [0, 0])[0] for n in nodes)
+    avg_y = sum(n.get("position", [0, 0])[1] for n in nodes) // len(nodes)
+    return [max_x + 200, avg_y]
+
+
+def build_workflow_payload(wf: dict, nodes: list) -> dict:
+    """Build the payload for updating a workflow."""
+    return {
+        'name': wf['name'],
+        'nodes': nodes,
+        'connections': wf['connections'],
+        'settings': wf.get('settings', {}),
+        'staticData': wf.get('staticData'),
+    }
+
+
+def handle_add_node(client: N8nClient, wf: dict, args) -> None:
+    """Create a new node in the workflow."""
+    nodes = wf.get("nodes", [])
+
+    if not args.node_type:
+        print("--type is required when using --add", file=sys.stderr)
+        sys.exit(1)
+    if not args.new_name:
+        print("--name is required when using --add", file=sys.stderr)
+        sys.exit(1)
+
+    for n in nodes:
+        if n.get('name') == args.new_name:
+            print(f"Node with name '{args.new_name}' already exists.", file=sys.stderr)
+            sys.exit(1)
+
+    node_type = get_node_type_full(args.node_type)
+
+    if args.position:
+        try:
+            x, y = args.position.split(',')
+            position = [int(x), int(y)]
+        except ValueError:
+            print("Invalid position format. Use X,Y (e.g., 200,300)", file=sys.stderr)
+            sys.exit(1)
+    else:
+        position = calculate_node_position(nodes)
+
+    new_node = {
+        'id': str(uuid.uuid4()),
+        'name': args.new_name,
+        'type': node_type,
+        'typeVersion': 1,
+        'position': position,
+        'parameters': {},
+    }
+
+    if node_type == 'n8n-nodes-base.code':
+        new_node['typeVersion'] = 2
+        new_node['parameters'] = {
+            'jsCode': '// Add your code here\nreturn items;',
+            'mode': 'runOnceForAllItems',
+        }
+    elif node_type == 'n8n-nodes-base.switch':
+        new_node['typeVersion'] = 3
+        new_node['parameters'] = {
+            'rules': {
+                'values': []
+            },
+            'options': {}
+        }
+
+    if args.param:
+        for param in args.param:
+            if '=' not in param:
+                print(f"Invalid parameter format: {param}. Use key=value", file=sys.stderr)
+                sys.exit(1)
+            key, value = param.split('=', 1)
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError:
+                pass
+            set_nested_param(new_node['parameters'], key, value)
+
+    nodes.append(new_node)
+    client.update_workflow(args.id, build_workflow_payload(wf, nodes))
+    print(f"Node '{args.new_name}' created.")
+    print(f"Type: {node_type}")
+    print(f"Position: {position[0]}, {position[1]}")
+
+
+def handle_add_switch_rule(client: N8nClient, wf: dict, node: dict, args) -> None:
+    """Add a rule to a Switch node."""
+    nodes = wf.get("nodes", [])
+
+    if node.get('type') != 'n8n-nodes-base.switch':
+        print(f"Node '{args.name}' is not a Switch node.", file=sys.stderr)
+        sys.exit(1)
+
+    if not args.field:
+        print("--field is required when using --add-rule", file=sys.stderr)
+        sys.exit(1)
+    if not args.op:
+        print("--op is required when using --add-rule", file=sys.stderr)
+        sys.exit(1)
+    if not args.match_value:
+        print("--match-value is required when using --add-rule", file=sys.stderr)
+        sys.exit(1)
+    if not args.output_key:
+        print("--output-key is required when using --add-rule", file=sys.stderr)
+        sys.exit(1)
+
+    op_config = SWITCH_OPERATORS.get(args.op)
+    if not op_config:
+        print(f"Unknown operator: {args.op}", file=sys.stderr)
+        print(f"Available operators: {', '.join(SWITCH_OPERATORS.keys())}")
+        sys.exit(1)
+
+    if 'parameters' not in node:
+        node['parameters'] = {}
+    if 'rules' not in node['parameters']:
+        node['parameters']['rules'] = {'values': []}
+    if 'values' not in node['parameters']['rules']:
+        node['parameters']['rules']['values'] = []
+
+    new_rule = {
+        'id': str(uuid.uuid4()),
+        'conditions': {
+            'options': {
+                'caseSensitive': True,
+                'leftValue': '',
+                'typeValidation': 'strict',
+            },
+            'conditions': [
+                {
+                    'id': str(uuid.uuid4()),
+                    'leftValue': f'={{{{ $json.{args.field} }}}}',
+                    'rightValue': args.match_value,
+                    'operator': op_config,
+                }
+            ],
+            'combinator': 'and',
+        },
+        'renameOutput': True,
+        'outputKey': args.output_key,
+    }
+
+    rules = node['parameters']['rules']['values']
+    fallback_idx = None
+    for i, rule in enumerate(rules):
+        if rule.get('outputKey') == 'fallback' or rule.get('outputKey') == 'Fallback':
+            fallback_idx = i
+            break
+
+    if fallback_idx is not None:
+        rules.insert(fallback_idx, new_rule)
+    else:
+        rules.append(new_rule)
+
+    client.update_workflow(args.id, build_workflow_payload(wf, nodes))
+    rule_idx = fallback_idx if fallback_idx is not None else len(rules) - 1
+    print(f"Rule added to '{args.name}' at index {rule_idx}.")
+    print(f"Condition: {args.field} {args.op} '{args.match_value}'")
+    print(f"Output key: {args.output_key}")
+
+
+def cmd_connect(client: N8nClient, args) -> None:
+    """Add connection between nodes."""
+    wf = client.get_workflow(args.workflow_id)
+    nodes = wf.get("nodes", [])
+
+    source_node = None
+    target_node = None
+    for n in nodes:
+        if n.get('name') == args.source:
+            source_node = n
+        if n.get('name') == args.target:
+            target_node = n
+
+    if not source_node:
+        print(f"Source node '{args.source}' not found.", file=sys.stderr)
+        sys.exit(1)
+    if not target_node:
+        print(f"Target node '{args.target}' not found.", file=sys.stderr)
+        sys.exit(1)
+
+    connections = wf.get('connections', {})
+
+    if args.source not in connections:
+        connections[args.source] = {'main': []}
+
+    main_outputs = connections[args.source]['main']
+
+    while len(main_outputs) <= args.output:
+        main_outputs.append([])
+
+    new_connection = {
+        'node': args.target,
+        'type': 'main',
+        'index': 0,
+    }
+
+    for conn in main_outputs[args.output]:
+        if conn.get('node') == args.target:
+            print(f"Connection already exists from '{args.source}' output {args.output} to '{args.target}'.")
+            return
+
+    main_outputs[args.output].append(new_connection)
+
+    wf['connections'] = connections
+    client.update_workflow(args.workflow_id, build_workflow_payload(wf, nodes))
+    print(f"Connected '{args.source}' (output {args.output}) -> '{args.target}'")
+
+
+def cmd_disconnect(client: N8nClient, args) -> None:
+    """Remove connection between nodes."""
+    wf = client.get_workflow(args.workflow_id)
+    nodes = wf.get("nodes", [])
+
+    connections = wf.get('connections', {})
+
+    if args.source not in connections:
+        print(f"No connections from '{args.source}' found.", file=sys.stderr)
+        sys.exit(1)
+
+    main_outputs = connections[args.source].get('main', [])
+
+    if args.output is not None:
+        if args.output >= len(main_outputs):
+            print(f"Output index {args.output} does not exist for '{args.source}'.", file=sys.stderr)
+            sys.exit(1)
+
+        original_len = len(main_outputs[args.output])
+        main_outputs[args.output] = [
+            c for c in main_outputs[args.output]
+            if c.get('node') != args.target
+        ]
+        if len(main_outputs[args.output]) == original_len:
+            print(f"No connection found from '{args.source}' output {args.output} to '{args.target}'.", file=sys.stderr)
+            sys.exit(1)
+        print(f"Disconnected '{args.source}' (output {args.output}) -> '{args.target}'")
+    else:
+        removed = False
+        for i, output in enumerate(main_outputs):
+            original_len = len(output)
+            main_outputs[i] = [c for c in output if c.get('node') != args.target]
+            if len(main_outputs[i]) < original_len:
+                removed = True
+                print(f"Disconnected '{args.source}' (output {i}) -> '{args.target}'")
+        if not removed:
+            print(f"No connection found from '{args.source}' to '{args.target}'.", file=sys.stderr)
+            sys.exit(1)
+
+    wf['connections'] = connections
+    client.update_workflow(args.workflow_id, build_workflow_payload(wf, nodes))
+
+
 def cmd_node(client: N8nClient, args):
     wf = client.get_workflow(args.id)
     nodes = wf.get("nodes", [])
+
+    if args.add:
+        return handle_add_node(client, wf, args)
+
+    if not args.name:
+        print("Node name is required (unless using --add).", file=sys.stderr)
+        sys.exit(1)
 
     # Find the node by name
     node = None
@@ -228,6 +528,9 @@ def cmd_node(client: N8nClient, args):
         for n in nodes:
             print(f"  - {n.get('name')}")
         sys.exit(1)
+
+    if args.add_rule:
+        return handle_add_switch_rule(client, wf, node, args)
 
     # Handle --set-param-json (bulk parameter update)
     if args.set_param_json:
@@ -812,15 +1115,26 @@ def main():
     p_nodes.set_defaults(func=cmd_nodes)
 
     # node
-    p_node = subparsers.add_parser("node", help="View or edit a specific node")
+    p_node = subparsers.add_parser("node", help="View, edit, or create nodes")
     p_node.add_argument("id", help="Workflow ID")
-    p_node.add_argument("name", help="Node name")
+    p_node.add_argument("name", nargs="?", help="Node name (required except with --add)")
     p_node.add_argument("--code", "-c", action="store_true", help="Show node code (Code nodes only)")
     p_node.add_argument("--set-code", "-s", metavar="FILE", help="Update node code from file")
     p_node.add_argument("--set-param", "-p", action="append", metavar="KEY=VALUE", help="Set a node parameter (can be used multiple times, supports dot notation for nested keys)")
     p_node.add_argument("--set-param-json", metavar="JSON", help="Set node parameters from JSON object (deep merged)")
     p_node.add_argument("--rename", "-r", metavar="NAME", help="Rename the node")
     p_node.add_argument("--json", action="store_true", help="Output as JSON")
+    p_node.add_argument("--add", action="store_true", help="Create a new node")
+    p_node.add_argument("--type", dest="node_type", help="Node type for --add (e.g., 'code', 'switch', or full type)")
+    p_node.add_argument("--name", dest="new_name", metavar="NAME", help="Node name for --add")
+    p_node.add_argument("--position", help="Position as X,Y for --add")
+    p_node.add_argument("--param", action="append", metavar="KEY=VALUE", help="Set a parameter for new node (--add)")
+    p_node.add_argument("--add-rule", action="store_true", help="Add rule to Switch node")
+    p_node.add_argument("--field", help="Field to match for --add-rule (e.g., 'title')")
+    p_node.add_argument("--op", choices=["contains", "equals", "not-equals", "starts-with", "ends-with", "regex"],
+                        help="Match operator for --add-rule")
+    p_node.add_argument("--match-value", help="Value to match for --add-rule")
+    p_node.add_argument("--output-key", help="Output key name for --add-rule")
     p_node.set_defaults(func=cmd_node)
 
     # export-code
@@ -882,6 +1196,22 @@ def main():
     p_trigger.add_argument("--test", "-t", action="store_true", help="Use test webhook URL")
     p_trigger.add_argument("--json", action="store_true", help="Output full result as JSON")
     p_trigger.set_defaults(func=cmd_trigger)
+
+    # connect
+    p_connect = subparsers.add_parser("connect", help="Add connection between nodes")
+    p_connect.add_argument("workflow_id", help="Workflow ID")
+    p_connect.add_argument("source", help="Source node name")
+    p_connect.add_argument("target", help="Target node name")
+    p_connect.add_argument("--output", type=int, default=0, help="Output index (default: 0)")
+    p_connect.set_defaults(func=cmd_connect)
+
+    # disconnect
+    p_disconnect = subparsers.add_parser("disconnect", help="Remove connection between nodes")
+    p_disconnect.add_argument("workflow_id", help="Workflow ID")
+    p_disconnect.add_argument("source", help="Source node name")
+    p_disconnect.add_argument("target", help="Target node name")
+    p_disconnect.add_argument("--output", type=int, help="Output index (removes from specific output)")
+    p_disconnect.set_defaults(func=cmd_disconnect)
 
     # credentials
     p_credentials = subparsers.add_parser("credentials", help="List all credentials")
