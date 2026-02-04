@@ -1,6 +1,6 @@
 [project]
 name = "n8n-cli"
-version = "0.2.0"
+version = "1.0.0"
 description = "Command-line tool for managing n8n workflows and troubleshooting executions"
 requires-python = ">=3.11"
 dependencies = [
