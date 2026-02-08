@@ -1,11 +1,18 @@
-# n8n CLI
+# n8n-client
 
 Python CLI for managing n8n workflows and troubleshooting executions.
 
-## Requirements
+## Installation
 
-- Python 3.11+
-- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+```bash
+pip install n8n-client
+```
+
+Or with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv pip install n8n-client
+```
 
 ## Setup
 
@@ -30,12 +37,10 @@ export N8N_API_KEY="your-api-key-here"
 export N8N_BASE_URL="https://your-instance.app.n8n.cloud"
 ```
 
-### 3. Run the CLI
-
-No installation needed - uses `uv run` with inline script dependencies:
+### 3. Verify installation
 
 ```bash
-uv run n8n-cli --help
+n8n-client --help
 ```
 
 ## CLI Usage
@@ -44,43 +49,43 @@ uv run n8n-cli --help
 
 ```bash
 # List all workflows
-uv run n8n-cli workflows
-uv run n8n-cli workflows --active
-uv run n8n-cli workflows --json
+n8n-client workflows
+n8n-client workflows --active
+n8n-client workflows --json
 
 # Get workflow details
-uv run n8n-cli workflow <workflow_id>
-uv run n8n-cli workflow <workflow_id> --json
+n8n-client workflow <workflow_id>
+n8n-client workflow <workflow_id> --json
 
 # Update workflow from JSON file
-uv run n8n-cli update <workflow_id> workflow.json
+n8n-client update <workflow_id> workflow.json
 
 # Activate/deactivate workflows
-uv run n8n-cli activate <workflow_id>
-uv run n8n-cli deactivate <workflow_id>
+n8n-client activate <workflow_id>
+n8n-client deactivate <workflow_id>
 ```
 
 ### Nodes (view and edit workflow nodes)
 
 ```bash
 # List all nodes in a workflow
-uv run n8n-cli nodes <workflow_id>
+n8n-client nodes <workflow_id>
 
 # View node details
-uv run n8n-cli node <workflow_id> "node name"
-uv run n8n-cli node <workflow_id> "node name" --json
+n8n-client node <workflow_id> "node name"
+n8n-client node <workflow_id> "node name" --json
 
 # View Code node's JavaScript
-uv run n8n-cli node <workflow_id> "node name" --code
+n8n-client node <workflow_id> "node name" --code
 
 # Update Code node from file
-uv run n8n-cli node <workflow_id> "node name" --set-code script.js
+n8n-client node <workflow_id> "node name" --set-code script.js
 
 # Rename a node
-uv run n8n-cli node <workflow_id> "old name" --rename "new name"
+n8n-client node <workflow_id> "old name" --rename "new name"
 
 # Rename and update code in one command
-uv run n8n-cli node <workflow_id> "old name" --rename "new name" --set-code script.js
+n8n-client node <workflow_id> "old name" --rename "new name" --set-code script.js
 ```
 
 ### Export/Import Code Nodes
@@ -89,52 +94,52 @@ Useful for editing Code node scripts in a proper editor with syntax highlighting
 
 ```bash
 # Export all Code nodes to a directory
-uv run n8n-cli export-code <workflow_id> ./nodes/
+n8n-client export-code <workflow_id> ./nodes/
 # Creates: ./nodes/node_name.js, ./nodes/_manifest.json
 
 # Edit the scripts with your editor...
 
 # Import updated scripts back to workflow
-uv run n8n-cli import-code <workflow_id> ./nodes/
+n8n-client import-code <workflow_id> ./nodes/
 ```
 
 ### Trigger Workflows
 
 ```bash
 # Trigger workflow by name via webhook
-uv run n8n-cli trigger "Alerting"
+n8n-client trigger "Alerting"
 
 # Trigger with JSON payload
-uv run n8n-cli trigger "Alerting" --data '{"key": "value"}'
+n8n-client trigger "Alerting" --data '{"key": "value"}'
 
 # Trigger with payload from file
-uv run n8n-cli trigger "Alerting" --file payload.json
+n8n-client trigger "Alerting" --file payload.json
 
 # Use test webhook URL (for debugging)
-uv run n8n-cli trigger "Alerting" --test --data '{"test": true}'
+n8n-client trigger "Alerting" --test --data '{"test": true}'
 
 # Run workflow directly (not via webhook)
-uv run n8n-cli run <workflow_id>
-uv run n8n-cli run <workflow_id> --data '{"input": "data"}'
-uv run n8n-cli run <workflow_id> --output  # show node outputs
+n8n-client run <workflow_id>
+n8n-client run <workflow_id> --data '{"input": "data"}'
+n8n-client run <workflow_id> --output  # show node outputs
 ```
 
 ### Executions
 
 ```bash
 # List executions
-uv run n8n-cli executions
-uv run n8n-cli executions --workflow <workflow_id>
-uv run n8n-cli executions --status error
-uv run n8n-cli executions -n 100
+n8n-client executions
+n8n-client executions --workflow <workflow_id>
+n8n-client executions --status error
+n8n-client executions -n 100
 
 # Get execution details (includes error info for failed executions)
-uv run n8n-cli execution <execution_id>
-uv run n8n-cli execution <execution_id> --data  # full execution data
+n8n-client execution <execution_id>
+n8n-client execution <execution_id> --data  # full execution data
 
 # Retry failed execution
-uv run n8n-cli retry <execution_id>
-uv run n8n-cli retry <execution_id> --latest  # use current workflow version
+n8n-client retry <execution_id>
+n8n-client retry <execution_id> --latest  # use current workflow version
 ```
 
 ## Python API Usage
@@ -178,46 +183,46 @@ client.deactivate_workflow("workflow_id")
 
 ```bash
 # 1. Export all Code nodes to files
-uv run n8n-cli export-code <workflow_id> ./nodes/
+n8n-client export-code <workflow_id> ./nodes/
 
 # 2. Edit scripts in your editor (with syntax highlighting)
 code ./nodes/
 
 # 3. Import changes back
-uv run n8n-cli import-code <workflow_id> ./nodes/
+n8n-client import-code <workflow_id> ./nodes/
 ```
 
 ### Quick Node Update
 
 ```bash
 # View current code
-uv run n8n-cli node <workflow_id> "node name" --code > script.js
+n8n-client node <workflow_id> "node name" --code > script.js
 
 # Edit and update
-uv run n8n-cli node <workflow_id> "node name" --set-code script.js
+n8n-client node <workflow_id> "node name" --set-code script.js
 ```
 
 ### Troubleshooting Executions
 
 ```bash
 # Find failed executions
-uv run n8n-cli executions --status error
+n8n-client executions --status error
 
 # Get error details
-uv run n8n-cli execution <id>
+n8n-client execution <id>
 
 # Get full execution data for debugging
-uv run n8n-cli execution <id> --data --json
+n8n-client execution <id> --data --json
 ```
 
 ### Testing Webhook Workflows
 
 ```bash
 # Trigger with test payload
-uv run n8n-cli trigger "Workflow Name" --test --file test_payload.json
+n8n-client trigger "Workflow Name" --test --file test_payload.json
 
 # Check execution result
-uv run n8n-cli executions --workflow <id> -n 1
+n8n-client executions --workflow <id> -n 1
 ```
 
 ## API Endpoints Covered
