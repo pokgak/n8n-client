@@ -1,14 +1,39 @@
 [project]
-name = "n8n-cli"
+name = "n8nctl"
 version = "1.0.0"
 description = "Command-line tool for managing n8n workflows and troubleshooting executions"
+readme = "README.md"
 requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "pokgak", email = "m.aimanismail@gmail.com"}
+]
+maintainers = [
+    {name = "pokgak", email = "m.aimanismail@gmail.com"}
+]
+keywords = ["n8n", "workflow", "automation", "cli", "api"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Systems Administration",
+]
 dependencies = [
     "httpx>=0.27.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/pokgak/n8nctl"
+Repository = "https://github.com/pokgak/n8nctl"
+Issues = "https://github.com/pokgak/n8nctl/issues"
+
 [project.scripts]
-n8n-cli = "n8n_cli:main"
+n8nctl = "n8n_cli:main"
 
 [build-system]
 requires = ["hatchling"]
